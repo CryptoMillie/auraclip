@@ -3,10 +3,16 @@
 
 import OpenAI from "openai";
 
-const chutes = new OpenAI({
-  apiKey: process.env.CHUTES_API_KEY!,
-  baseURL: process.env.CHUTES_BASE_URL ?? "https://llm.chutes.ai/v1",
-});
+let _chutes: OpenAI | null = null;
+function chutes() {
+  if (!_chutes) {
+    _chutes = new OpenAI({
+      apiKey: process.env.CHUTES_API_KEY!,
+      baseURL: process.env.CHUTES_BASE_URL ?? "https://llm.chutes.ai/v1",
+    });
+  }
+  return _chutes;
+}
 
 export type Highlight = {
   start: number; // seconds
@@ -44,7 +50,7 @@ export async function rankHighlights(
     ? `\n\nCURRENT TRENDING ANGLES (bias scoring toward moments that intersect these — this is what audiences are paying attention to right now):\n${opts.trendContext}`
     : "";
 
-  const res = await chutes.chat.completions.create({
+  const res = await chutes().chat.completions.create({
     model: process.env.CHUTES_LLM_MODEL ?? "deepseek-ai/DeepSeek-V3",
     temperature: 0.4,
     response_format: { type: "json_object" },
