@@ -1,0 +1,6 @@
+{
+  "functions": {
+    "app/api/analyze/route.ts": { "maxDuration": 300 },
+    "app/api/clip/route.ts": { "maxDuration": 300 }
+  }
+}
