@@ -11,6 +11,16 @@ type Highlight = {
   reason: string;
 };
 
+async function safeJson(res: Response) {
+  const text = await res.text();
+  if (!text) throw new Error(`Server returned ${res.status} with no body`);
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(text.slice(0, 200));
+  }
+}
+
 const card: React.CSSProperties = {
   background: "#141417",
   border: "1px solid #26262b",
@@ -42,7 +52,7 @@ export default function Page() {
       const r = await fetch("/api/upload-url", {
         method: "POST",
         body: JSON.stringify({ filename: file.name, contentType: file.type }),
-      }).then((x) => x.json());
+      }).then(safeJson);
       await fetch(r.uploadUrl, { method: "PUT", body: file });
       setSourceKey(r.key);
       setYoutubeUrl("");
@@ -61,7 +71,7 @@ export default function Page() {
       const r = await fetch("/api/analyze", {
         method: "POST",
         body: JSON.stringify({ youtubeUrl: youtubeUrl || undefined, sourceKey }),
-      }).then((x) => x.json());
+      }).then(safeJson);
       if (r.code === "OVER_LIMIT") {
         // ── MONETIZATION SEAM ──────────────────────────────────────────────
         // Today: just inform. Later: swap this for an upgrade prompt / checkout.
@@ -97,7 +107,7 @@ export default function Page() {
           cues,
           title: h.title,
         }),
-      }).then((x) => x.json());
+      }).then(safeJson);
       if (r.error) throw new Error(r.error);
       setClips((c) => ({ ...c, [i]: r.clipUrl }));
     } catch (e: any) {

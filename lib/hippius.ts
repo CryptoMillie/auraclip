@@ -10,41 +10,47 @@ import {
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { readFile } from "node:fs/promises";
 
-const bucket = process.env.HIPPIUS_BUCKET ?? "auraclip";
+const bucket = () => process.env.HIPPIUS_BUCKET ?? "auraclip";
 
-const s3 = new S3Client({
-  region: process.env.HIPPIUS_REGION ?? "decentralized",
-  endpoint: process.env.HIPPIUS_S3_ENDPOINT ?? "https://s3.hippius.com",
-  credentials: {
-    accessKeyId: process.env.HIPPIUS_ACCESS_KEY!,
-    secretAccessKey: process.env.HIPPIUS_SECRET_KEY!,
-  },
-  forcePathStyle: true, // required by most S3-compatible providers
-});
+let _s3: S3Client | null = null;
+function s3() {
+  if (!_s3) {
+    _s3 = new S3Client({
+      region: process.env.HIPPIUS_REGION ?? "decentralized",
+      endpoint: process.env.HIPPIUS_S3_ENDPOINT ?? "https://s3.hippius.com",
+      credentials: {
+        accessKeyId: process.env.HIPPIUS_ACCESS_KEY!,
+        secretAccessKey: process.env.HIPPIUS_SECRET_KEY!,
+      },
+      forcePathStyle: true, // required by most S3-compatible providers
+    });
+  }
+  return _s3;
+}
 
 // Mint a URL the browser PUTs the raw source file to — keeps multi-GB video off Vercel.
 export async function presignUpload(key: string, contentType: string) {
   const cmd = new PutObjectCommand({
-    Bucket: bucket,
+    Bucket: bucket(),
     Key: key,
     ContentType: contentType,
   });
-  const url = await getSignedUrl(s3, cmd, { expiresIn: 3600 });
+  const url = await getSignedUrl(s3(), cmd, { expiresIn: 3600 });
   return { url, key };
 }
 
 // Time-limited read URL. ffmpeg seeks into this with HTTP range requests — no full download.
 export async function presignDownload(key: string, expiresIn = 3600) {
-  const cmd = new GetObjectCommand({ Bucket: bucket, Key: key });
-  return getSignedUrl(s3, cmd, { expiresIn });
+  const cmd = new GetObjectCommand({ Bucket: bucket(), Key: key });
+  return getSignedUrl(s3(), cmd, { expiresIn });
 }
 
 // Push a finished clip (from /tmp) up to Hippius and return a shareable read URL.
 export async function putClip(localPath: string, key: string) {
   const body = await readFile(localPath);
-  await s3.send(
+  await s3().send(
     new PutObjectCommand({
-      Bucket: bucket,
+      Bucket: bucket(),
       Key: key,
       Body: body,
       ContentType: "video/mp4",
