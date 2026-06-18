@@ -71,27 +71,28 @@ export async function rankHighlights(
 }
 
 // Only used when there are no existing captions (e.g. a raw uploaded file).
-// For long files this can exceed a single Vercel call — see README for the Chutes-container path.
+// Downloads the audio from the presigned URL and sends it to Chutes Whisper
+// via the OpenAI-compatible audio transcription endpoint.
 export async function transcribeAudio(audioUrl: string): Promise<string> {
-  const url = process.env.CHUTES_WHISPER_URL;
-  if (!url) throw new Error("CHUTES_WHISPER_URL not set");
+  // Download the audio from Hippius so we can send it as a file upload.
+  const audioRes = await fetch(audioUrl);
+  if (!audioRes.ok) throw new Error(`Failed to download audio: ${audioRes.status}`);
+  const audioBuffer = await audioRes.arrayBuffer();
+  const audioFile = new File([audioBuffer], "audio.mp4", { type: "video/mp4" });
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${process.env.CHUTES_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ audio_url: audioUrl, timestamps: true }),
+  const transcription = await chutes().audio.transcriptions.create({
+    file: audioFile,
+    model: process.env.CHUTES_WHISPER_MODEL ?? "openai/whisper-large-v3",
+    response_format: "verbose_json",
   });
-  if (!res.ok) throw new Error(`Chutes transcription failed: ${res.status}`);
-  const data = await res.json();
-  // Normalize to a flat timestamped transcript string. Adjust to your chute's response shape.
-  if (typeof data.text === "string") return data.text;
+
+  // Normalize to a flat timestamped transcript string.
+  const data = transcription as any;
   if (Array.isArray(data.segments)) {
     return data.segments
       .map((s: any) => `[${s.start.toFixed(1)}] ${s.text.trim()}`)
       .join("\n");
   }
+  if (typeof data.text === "string") return data.text;
   return JSON.stringify(data);
 }
